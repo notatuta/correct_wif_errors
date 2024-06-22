@@ -1,0 +1,9 @@
+[submodule "cpp-ripemd160"]
+	path = cpp-ripemd160
+	url = https://github.com/miguelmota/cpp-ripemd160
+[submodule "libbase58"]
+	path = libbase58
+	url = https://github.com/bitcoin/libbase58.git
+[submodule "sha-2"]
+	path = sha-2
+	url = https://github.com/amosnier/sha-2.git
