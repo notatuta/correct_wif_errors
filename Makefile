@@ -4,7 +4,7 @@ correct_wif_errors: correct_wif_errors.o sha-256.o base58.o ripemd160.o
 	g++ -g -o correct_wif_errors correct_wif_errors.o sha-256.o base58.o ripemd160.o -lgmp -lgmpxx 
 
 clean:
-	rm correct_wif_errors.o sha-256.o base58.o
+	rm correct_wif_errors.o sha-256.o base58.o ripemd160.o
 
 base58.o: libbase58/base58.c
 	gcc -O3 -c -Ilibbase58 libbase58/base58.c
