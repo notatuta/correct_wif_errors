@@ -7,3 +7,12 @@
 [submodule "sha-2"]
 	path = sha-2
 	url = https://github.com/amosnier/sha-2.git
+[submodule "bech32"]
+	path = bech32
+	url = https://github.com/sipa/bech32.git
+[submodule "hmac-cpp"]
+	path = hmac-cpp
+	url = https://github.com/NewYaroslav/hmac-cpp.git
+[submodule "sha"]
+	path = sha
+	url = https://github.com/alvxck/sha.git

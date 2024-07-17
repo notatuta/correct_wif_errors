@@ -1,15 +1,17 @@
 # correct_wif_errors
-Correct transcription errors in Wallet Import Format (WIF) strings.
+Correct transcription errors in Wallet Import Format (WIF) strings or check seed phrase.
 
-Uses GMP, install as follows:
+Uses [GMP](http://gmplib.org), install as follows:
 
     sudo apt-get install libgmp-dev
 
-Then just
+When checking out, include submodules:
+
+    git clone --recurse-submodules https://github.com/notatuta/correct_wif_errors.git
+
+Then
 
     make test
 
-One test case is expected to fail (more errors that can be corrected).
-Last P2PKH address should be 1Pushkin2QHzEKFjNSs5KqAb6HoLSoFyPG.
-
+Last P2PKH address should be `1Pushkin2QHzEKFjNSs5KqAb6HoLSoFyPG`.
 
