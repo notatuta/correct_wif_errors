@@ -507,6 +507,7 @@ int main(int argc, char* argv[])
     // m/84h/0h/0h/0 Receiving
     std::string receiving_private_key_s(electrum ? purpose_private_key_s : account_private_key_s);
     std::string receiving_chain_code_s(electrum ? purpose_chain_code_s : account_chain_code_s);
+    std::string change_private_key_s(receiving_private_key_s), change_chain_code_s(receiving_chain_code_s);
     for ( uint32_t index = 0u
         ; !derive_child_key(receiving_private_key_s, receiving_chain_code_s, index, 4)
         ; index++
@@ -516,7 +517,6 @@ int main(int argc, char* argv[])
     }
 
     // m/84h/0h/0h/1 Change
-    std::string change_private_key_s(account_private_key_s), change_chain_code_s(account_chain_code_s);
     for ( uint32_t index = 1u
         ; !derive_child_key(change_private_key_s, change_chain_code_s, index, 4)
         ; index++
