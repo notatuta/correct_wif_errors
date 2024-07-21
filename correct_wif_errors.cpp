@@ -451,8 +451,47 @@ int main(int argc, char* argv[])
         return -4;
       }
       std::cout << "BIP39 12 word checksum match" << std::endl;
+    } else if (argc == 26 || argc == 14) {
+      unsigned monero_words = argc - 2;
+      std::string prefixes;
+      for (unsigned i = 0; i < monero_words; i++) {
+        std::string word(argv[i + 1]);
+        prefixes.append(word.substr(0,3));
+      }
+      uint32_t crc32 = ~0U;
+      {
+        unsigned crc32_table[256] = {};
+        for (uint32_t i = 0; i < 256; i++) {
+          uint32_t j = i;
+          for (int k = 0; k < 8; k++) {
+            j = j & 1 ? (j >> 1) ^ 0xEDB88320 : j >> 1;
+          }
+          crc32_table[i] = j;
+        }
+        for (size_t i = 0; i < prefixes.length(); i++) {
+          crc32 = crc32_table[(crc32 ^ prefixes.at(i)) & 0xff] ^ (crc32 >> 8);
+        }
+        crc32 = ~crc32;
+      }
+      unsigned checksum_word_position = crc32 % monero_words;
+      std::string checksum_word(argv[checksum_word_position + 1]);
+      std::string last_word(argv[monero_words + 1]); 
+      if (last_word == checksum_word) {
+        if (monero_words == 24) {
+          std::cout << "Monero mnemonic seed (25 words)" << std::endl;
+        } else {
+          std::cout << "MyMonero mnemonic seed (13 words)" << std::endl;
+        }
+        return 0;
+      } else {
+        std::cout << "May be a Monero mnemonic seed, but last word (" << last_word 
+                  << ") is different from checksum word " 
+                  << (checksum_word_position + 1) << " (" 
+                  << checksum_word << ")" << std::endl;
+        return -5;
+      }
     } else {
-      std::cout << "Unknow seed phrase type" << std::endl;
+      std::cout << "Unknown seed phrase type" << std::endl;
       return -5;
     }
 
