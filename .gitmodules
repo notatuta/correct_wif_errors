@@ -16,3 +16,6 @@
 [submodule "sha"]
 	path = sha
 	url = https://github.com/alvxck/sha.git
+[submodule "Bitcoin-Cryptography-Library"]
+	path = Bitcoin-Cryptography-Library
+	url = https://github.com/nayuki/Bitcoin-Cryptography-Library.git

@@ -12,15 +12,18 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <set>
 #include <stdexcept> // To use runtime_error
 #include <unordered_map>
 #include <gmpxx.h>
 #include "libbase58.h"
 #include "sha-256.h"
+#include "monerowords.h"
 #include "bip39words.h"
 #include "sha-2/sha-256.h"
 #include "hmac-cpp/hmac.hpp"
 #include "bech32/ref/c++/segwit_addr.h"
+#include "Bitcoin-Cryptography-Library/cpp/Keccak256.hpp"
 
 extern "C" {
   void ripemd160(const uint8_t* msg, uint32_t msg_len, uint8_t* hash);
@@ -271,26 +274,79 @@ std::string serialize_compressed_private_key(const std::string& compressed_priva
   return std::string(b58c);
 }
 
-std::string serialize_bech32_address(const std::string& private_key_s)
+std::string serialize_ethereum_private_key(const std::string& private_key_s)
+{
+  char eth_privkey_hex_lowercase[65] = {0};
+  char eth_privkey_hex_mixedcase[65] = {0};
+  const char* hex_alphabet_lowercase = "0123456789abcdef";
+  const char* hex_alphabet_uppercase = "0123456789ABCDEF";
+  for (int i = 0; i < 32; i++) {
+    eth_privkey_hex_lowercase[2 * i    ] = hex_alphabet_lowercase[(private_key_s.at(i) >> 4) & 0xf];
+    eth_privkey_hex_lowercase[2 * i + 1] = hex_alphabet_lowercase[private_key_s.at(i) & 0xf];
+  }
+  uint8_t hash[32] = {0};
+  Keccak256::getHash((const uint8_t*)eth_privkey_hex_lowercase, 64, hash);
+  for (int i = 0; i < 32; i++) {
+    const char* uppernibble_alphabet = (hash[i] & 0x80 ? hex_alphabet_uppercase : hex_alphabet_lowercase);
+    const char* lowernibble_alphabet = (hash[i] & 0x08 ? hex_alphabet_uppercase : hex_alphabet_lowercase);
+    eth_privkey_hex_mixedcase[2 * i    ] = uppernibble_alphabet[(private_key_s.at(i) >> 4) & 0xf];
+    eth_privkey_hex_mixedcase[2 * i + 1] = lowernibble_alphabet[private_key_s.at(i) & 0xf];
+  }
+  return std::string("0x") + std::string(eth_privkey_hex_mixedcase);
+}
+
+std::string serialize_address(const std::string& private_key_s, bool eth = false)
 {
   mpz_class cpriv_m;
   mpz_import(cpriv_m.get_mpz_t(), 32, 1, 1, -1, 0, private_key_s.c_str());
-  mpz_class cpub_m(private_to_public(cpriv_m));
-  uint8_t cpub[33];
-  size_t cpub_length;
-  mpz_export(cpub, &cpub_length, 1, 1, -1, 0, cpub_m.get_mpz_t()); 
-  if (cpub_length > 33) {
-    throw std::runtime_error("cpub_length > 33\n"); 
+  if (eth) {
+    mpz_class cpub_m(private_to_public(cpriv_m, false));
+    uint8_t cpub[65] = {0}; // 0x04, 32 byte x, 32 byte y
+    size_t cpub_length;
+    mpz_export(cpub, &cpub_length, 1, 1, -1, 0, cpub_m.get_mpz_t()); 
+    if (cpub_length > 65) {
+      throw std::runtime_error("cpub_length > 65\n"); 
+    }
+    if (cpub[0] != 0x04) {
+      throw std::runtime_error("cpub[0] != 0x04\n"); 
+    }
+    uint8_t hash[32] = {0};
+    Keccak256::getHash(&cpub[1], 64, hash);
+    char eth_addr_hex_lowercase[41] = {0};
+    char eth_addr_hex_mixedcase[41] = {0};
+    const char* hex_alphabet_lowercase = "0123456789abcdef";
+    const char* hex_alphabet_uppercase = "0123456789ABCDEF";
+    for (int i = 0; i < 20; i++) {
+      eth_addr_hex_lowercase[2 * i    ] = hex_alphabet_lowercase[(hash[i + 12] >> 4) & 0xf];
+      eth_addr_hex_lowercase[2 * i + 1] = hex_alphabet_lowercase[hash[i + 12] & 0xf];
+    }
+    uint8_t hash2[32] = {0};
+    Keccak256::getHash((const uint8_t*)eth_addr_hex_lowercase, 40, hash2);
+    for (int i = 0; i < 20; i++) {
+      const char* uppernibble_alphabet = (hash2[i] & 0x80 ? hex_alphabet_uppercase : hex_alphabet_lowercase);
+      const char* lowernibble_alphabet = (hash2[i] & 0x08 ? hex_alphabet_uppercase : hex_alphabet_lowercase);
+      eth_addr_hex_mixedcase[2 * i    ] = uppernibble_alphabet[(hash[i + 12] >> 4) & 0xf];
+      eth_addr_hex_mixedcase[2 * i + 1] = lowernibble_alphabet[hash[i + 12] & 0xf];
+    }
+    return std::string("0x") + std::string(eth_addr_hex_mixedcase);
+  } else {
+    mpz_class cpub_m(private_to_public(cpriv_m));
+    uint8_t cpub[33];
+    size_t cpub_length;
+    mpz_export(cpub, &cpub_length, 1, 1, -1, 0, cpub_m.get_mpz_t()); 
+    if (cpub_length > 33) {
+      throw std::runtime_error("cpub_length > 33\n"); 
+    }
+    uint8_t sha256digest[32];
+    calc_sha_256(sha256digest, cpub, cpub_length);
+    uint8_t hash160[20];
+    ripemd160(sha256digest, 32, hash160);
+    std::vector<uint8_t> v(20);
+    for (int i = 0; i < 20; i++) {
+      v[i] = hash160[i];
+    }
+    return segwit_addr::encode(std::string("bc"), 0, v);
   }
-  uint8_t sha256digest[32];
-  calc_sha_256(sha256digest, cpub, cpub_length);
-  uint8_t hash160[20];
-  ripemd160(sha256digest, 32, hash160);
-  std::vector<uint8_t> v(20);
-  for (int i = 0; i < 20; i++) {
-    v[i] = hash160[i];
-  }
-  return segwit_addr::encode(std::string("bc"), 0, v);
 }
 
 // On success updates key_s and chain_code_s, returns true
@@ -391,6 +447,7 @@ int main(int argc, char* argv[])
       return -1;
     }
   }
+  bool ethereum = true;
   if (argc >= 3) {
     bool electrum = false;
     std::string seed_phrase; 
@@ -409,6 +466,7 @@ int main(int argc, char* argv[])
     } else if (hash.substr(0,3) == "100") {
       std::cout << "Segwit Electrum wallet seed phrase (P2WPKH and P2WSH wallets)" << std::endl;
       electrum = true;
+      ethereum = false;
     } else if (hash.substr(0,3) == "101") {
       std::cout << "2FA Electrum wallet seed phrase (two-factor authenticated wallets)" << std::endl;
       return 0;
@@ -452,30 +510,36 @@ int main(int argc, char* argv[])
       }
       std::cout << "BIP39 12 word checksum match" << std::endl;
     } else if (argc == 26 || argc == 14) {
+      // Not BIP39, maybe Monero?
+      std::set<std::string> wordlist;
+      for (unsigned w = 0; w < 1626; w++) {
+        wordlist.insert(monerowords[w]);
+      }
       unsigned monero_words = argc - 2;
-      std::string prefixes;
-      for (unsigned i = 0; i < monero_words; i++) {
-        std::string word(argv[i + 1]);
-        prefixes.append(word.substr(0,3));
+      unsigned crc32_table[256] = {};
+      for (uint32_t i = 0; i < 256; i++) {
+        uint32_t j = i;
+        for (int k = 0; k < 8; k++) {
+          j = j & 1 ? (j >> 1) ^ 0xEDB88320 : j >> 1;
+        }
+        crc32_table[i] = j;
       }
       uint32_t crc32 = ~0U;
-      {
-        unsigned crc32_table[256] = {};
-        for (uint32_t i = 0; i < 256; i++) {
-          uint32_t j = i;
-          for (int k = 0; k < 8; k++) {
-            j = j & 1 ? (j >> 1) ^ 0xEDB88320 : j >> 1;
-          }
-          crc32_table[i] = j;
+      for (int crc_index = 1; crc_index < argc - 1; crc_index++) {
+        std::string word(argv[crc_index]);
+        std::transform(word.begin(), word.end(), word.begin(), ::tolower); 
+        if (!wordlist.count(word)) {
+          std::cerr << word << " is not in Monero word list" << std::endl;
+          return -2;
+        } 
+        for (size_t crc_letter = 0; crc_letter < 3 && crc_letter < word.length(); crc_letter++) {
+          crc32 = crc32_table[(crc32 ^ word.at(crc_letter)) & 0xff] ^ (crc32 >> 8);
         }
-        for (size_t i = 0; i < prefixes.length(); i++) {
-          crc32 = crc32_table[(crc32 ^ prefixes.at(i)) & 0xff] ^ (crc32 >> 8);
-        }
-        crc32 = ~crc32;
       }
+      crc32 = ~crc32;
       unsigned checksum_word_position = crc32 % monero_words;
       std::string checksum_word(argv[checksum_word_position + 1]);
-      std::string last_word(argv[monero_words + 1]); 
+      std::string last_word(argv[argc - 1]); 
       if (last_word == checksum_word) {
         if (monero_words == 24) {
           std::cout << "Monero mnemonic seed (25 words)" << std::endl;
@@ -483,13 +547,17 @@ int main(int argc, char* argv[])
           std::cout << "MyMonero mnemonic seed (13 words)" << std::endl;
         }
         return 0;
+      }
+      std::cout << "May be a " << (monero_words == 24 ? "Monero" : "MyMonero") 
+                << " mnemonic seed, but last word (" << last_word << ")";
+      if (!wordlist.count(last_word)) {
+        std::cout << " is not in Monero word list" << std::endl;
       } else {
-        std::cout << "May be a Monero mnemonic seed, but last word (" << last_word 
-                  << ") is different from checksum word " 
+        std::cout << " is different from checksum word " 
                   << (checksum_word_position + 1) << " (" 
                   << checksum_word << ")" << std::endl;
-        return -5;
       }
+      return -5;
     } else {
       std::cout << "Unknown seed phrase type" << std::endl;
       return -5;
@@ -513,9 +581,9 @@ int main(int argc, char* argv[])
     std::string master_private_key_s(master_hmac.substr(0, 32));
     std::string master_chain_code_s(master_hmac.substr(32, 32));
 
-    // m/84h Purpose
+    // m/84h Purpose for Bitcoin, m/44h for Ethereum
     std::string purpose_private_key_s(master_private_key_s), purpose_chain_code_s(master_chain_code_s);
-    for ( uint32_t index = (1u << 31) + (electrum ? 0u : 84u)
+    for ( uint32_t index = (1u << 31) + (electrum ? 0u : (ethereum ? 44u : 84u))
         ; !derive_child_key(purpose_private_key_s, purpose_chain_code_s, index, 1, electrum)
         ; index++
         ) { // Reset before trying again with the next index
@@ -523,9 +591,9 @@ int main(int argc, char* argv[])
       purpose_chain_code_s = master_chain_code_s;
     }
 
-    // m/84h/0h Coin type
+    // m/84h/0h Coin type for Bitcoin, m/44h/60h for Ethereum
     std::string coin_type_private_key_s(purpose_private_key_s), coin_type_chain_code_s(purpose_chain_code_s);
-    for ( uint32_t index = (1u << 31)
+    for ( uint32_t index = (1u << 31) + (ethereum ? 60u : 0u)
         ; !derive_child_key(coin_type_private_key_s, coin_type_chain_code_s, index, 2)
         ; index++
         ) { // Reset before trying again with the next index
@@ -533,7 +601,7 @@ int main(int argc, char* argv[])
       coin_type_chain_code_s = purpose_chain_code_s;
     }
 
-    // m/84h/0h/0h Account
+    // m/84h/0h/0h Account for Bitcoin, m/44h/60h/0h for Ethereum
     std::string account_private_key_s(coin_type_private_key_s), account_chain_code_s(coin_type_chain_code_s);
     for ( uint32_t index = (1u << 31)
         ; !derive_child_key(account_private_key_s, account_chain_code_s, index, 3, !electrum)
@@ -543,7 +611,7 @@ int main(int argc, char* argv[])
       account_chain_code_s = coin_type_chain_code_s;
     }
 
-    // m/84h/0h/0h/0 Receiving
+    // m/84h/0h/0h/0 Receiving for Bitcoin, m/44h/60h/0h/0 for Ethereum
     std::string receiving_private_key_s(electrum ? purpose_private_key_s : account_private_key_s);
     std::string receiving_chain_code_s(electrum ? purpose_chain_code_s : account_chain_code_s);
     std::string change_private_key_s(receiving_private_key_s), change_chain_code_s(receiving_chain_code_s);
@@ -555,7 +623,7 @@ int main(int argc, char* argv[])
       receiving_chain_code_s = electrum ? purpose_chain_code_s : account_chain_code_s;
     }
 
-    // m/84h/0h/0h/1 Change
+    // m/84h/0h/0h/1 Change for Bitcoin, m/44h/60h/0h/1 for Ethereum
     for ( uint32_t index = 1u
         ; !derive_child_key(change_private_key_s, change_chain_code_s, index, 4)
         ; index++
@@ -564,7 +632,10 @@ int main(int argc, char* argv[])
       change_chain_code_s = account_chain_code_s;
     }
 
-    std::cout << "First 20 addresses for " << (electrum ? "Electrum derivation path m/0h" : "BIP84 derivation path m/84h/0h/0h") << std::endl;
+    std::cout << "First 20 addresses for " 
+              << (electrum ? "Electrum derivation path m/0h" : 
+                 (ethereum ? "BIP44 derivation path m/44h/60h/0h" :
+                             "BIP84 derivation path m/84h/0h/0h")) << std::endl;
     std::cout << "index,type,private_key,address" << std::endl;
     for (int is_change = 0; is_change < 2; is_change++) {
       for (uint32_t index = 0; index < 20u; ) {
@@ -574,10 +645,15 @@ int main(int argc, char* argv[])
           private_key2_s = is_change ? change_private_key_s : receiving_private_key_s;
           chain_code2_s = is_change ? change_chain_code_s : receiving_chain_code_s;
         }
-        std::string private_key_b58(serialize_compressed_private_key(private_key2_s));
-        std::string bech32_address(serialize_bech32_address(private_key2_s));
+        std::string formatted_private_key;
+        if (ethereum) {
+          formatted_private_key = serialize_ethereum_private_key(private_key2_s);
+        } else {
+          formatted_private_key = serialize_compressed_private_key(private_key2_s);
+        }
+        std::string formatted_address(serialize_address(private_key2_s, ethereum));
         std::cout << (index - 1) << "," << (is_change ? "change" : "receiving") << "," 
-                  << private_key_b58 << "," << bech32_address << std::endl;
+                  << formatted_private_key << "," << formatted_address << std::endl;
       }
     }
     return 0;
@@ -666,6 +742,41 @@ int main(int argc, char* argv[])
       // 4 byte prefix + 1 byte depth + 4 byte fingerprint + 4 byte child number + 32 byte chain code + 33 byte key + 4 byte checksum
       xsz = 82;
       break;
+    case '0':
+      if (wif[1] == 'x' && wif_length == 42) { // ERC 55 checksum
+        std::string lowercase_eth(&wif[2]);
+        std::transform(lowercase_eth.begin(), lowercase_eth.end(), lowercase_eth.begin(), ::tolower);
+        uint8_t hash[32] = {0};
+        Keccak256::getHash((const uint8_t*)lowercase_eth.c_str(), 40, hash);
+        for (unsigned i = 0; i < 40; i++) {
+          bool bit = hash[i / 2] & (i % 2 ? 0x08 : 0x80);
+          switch (wif[i + 2]) {
+            case '0': case '1': case '2': case '3': case '4':
+            case '5': case '6': case '7': case '8': case '9':
+              break;
+            case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
+              if (bit) {
+                std::cout << "Looks like Ethereum address, but ERC-55 checksum does not match\n";
+                std::cerr << "Character " << wif[i + 2] << " at position " << i << " is lowercase but bit " << i * 4 << " of keccak256 is 1\n";
+                return -15;
+              }
+              break;
+            case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
+              if (!bit) {
+                std::cout << "Looks like Ethereum address, but ERC-55 checksum does not match\n";
+                std::cerr << "Character " << wif[i + 2] << " at position " << i << " is uppercase but bit " << i * 4 << " of keccak256 is 0\n";
+                return -15;
+              }
+              break;
+            default:
+              std::cerr << "Starts like Ethereum address, but " << wif[i + 2] << " is not a hex character\n";
+              return -15;
+          } 
+        }
+        std::cout << "Ethereum addess, checksum matches\n";
+        return 0;
+      }
+      break;
     default:
       std::cerr << "Starts with unknown prefix " << argv[1][0] << "\n";
       break;
@@ -685,7 +796,7 @@ int main(int argc, char* argv[])
       // 1 version byte + 32 byte key + 1 byte flag + 4 byte checksum (compressed)
       std::cout << "P2PKH address " << serialize_public_key(private_key, wif_length == 52) << "\n";
       if ((wif[0] == 'K' || wif[0] == 'L') && wif_length == 52) {
-        std::cout << "SegWit address " << serialize_bech32_address(std::string((const char*)(&x[1]), 32)) << "\n";
+        std::cout << "SegWit address " << serialize_address(std::string((const char*)(&x[1]), 32)) << "\n";
       }
     } else if (wif[1] == 'p') {
       // 4 byte prefix + 1 byte depth + 4 byte fingerprint + 4 byte child number + 32 byte chain code + 33 byte key + 4 byte checksum

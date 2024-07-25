@@ -1,10 +1,10 @@
 all: correct_wif_errors
 
-correct_wif_errors: correct_wif_errors.o sha-256.o base58.o ripemd160.o sha2.o sha256.o sha512.o bech32.o segwit_addr.o
-	g++ -g -o correct_wif_errors correct_wif_errors.o sha-256.o base58.o ripemd160.o sha2.o sha256.o sha512.o bech32.o segwit_addr.o -lgmp -lgmpxx 
+correct_wif_errors: correct_wif_errors.o sha-256.o base58.o ripemd160.o sha2.o sha256.o sha512.o bech32.o segwit_addr.o Keccak256.o
+	g++ -g -o correct_wif_errors correct_wif_errors.o sha-256.o base58.o ripemd160.o sha2.o sha256.o sha512.o bech32.o segwit_addr.o Keccak256.o -lgmp -lgmpxx 
 
 clean:
-	rm correct_wif_errors.o sha-256.o base58.o ripemd160.o sha2.o sha256.o sha512.o bech32.o segwit_addr.o
+	rm correct_wif_errors.o sha-256.o base58.o ripemd160.o sha2.o sha256.o sha512.o bech32.o segwit_addr.o Keccak256.o
 
 base58.o: libbase58/base58.c
 	gcc -c -Ilibbase58 libbase58/base58.c
@@ -33,12 +33,17 @@ bech32.o: bech32/ref/c++/bech32.cpp
 segwit_addr.o: bech32/ref/c++/segwit_addr.cpp
 	g++ -Wall -Wextra -g -c bech32/ref/c++/segwit_addr.cpp
 
+Keccak256.o: Bitcoin-Cryptography-Library/cpp/Keccak256.cpp
+	g++ -Wall -Wextra -g -c Bitcoin-Cryptography-Library/cpp/Keccak256.cpp
+
 test: correct_wif_errors
 	./correct_wif_errors 5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ
 	./correct_wif_errors 5HueCGU8rMjxEXxixuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ
 	./correct_wif_errors 5HueCGU8rMjxEXxixuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTj
 	./correct_wif_errors bc1qy7m6d8mh5em8drkurgu6m46p6xmlqar63kl4vv
+	./correct_wif_errors 0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed
 	./correct_wif_errors abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+	./correct_wif_errors eight vessel dolphin sadness unwind mixture foes answers epoxy degrees else awkward talent wagtail revamp lawsuit inexact ravine paradise distance oasis ascend musical nasty nasty
 	./correct_wif_errors egg face
 	./correct_wif_errors L2hPS1vMTd37haEcTeuXUr2ssn5VcD68j8KoLJ71rUkNXWHneTqw
 	./correct_wif_errors 5JjYhUmMs3a5jt4NfsWoyvabTPHiF5zNaZyBWDrAK3zdUQbZjmN
